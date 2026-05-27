@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"strings"
 )
@@ -70,4 +71,42 @@ func Info(message string, fields Fields) {
 
 func Error(message string, fields Fields) {
 	Log(context.Background(), slog.LevelError, message, fields)
+}
+
+func LogHTTPFailure(
+	message string,
+	provider string,
+	event string,
+	reqData Fields,
+	resp *http.Response,
+	respBody []byte,
+	err error,
+) {
+	fields := Fields{
+		"event":    event,
+		"provider": provider,
+		"request":  reqData,
+	}
+
+	if resp != nil {
+		fields["status_code"] = resp.StatusCode
+
+		if len(respBody) > 0 {
+			fields["response_body"] = Truncate(string(respBody), 1500)
+		}
+	}
+
+	if err != nil {
+		fields["error"] = err.Error()
+	}
+
+	Error(message, fields)
+}
+
+func Truncate(s string, max int) string {
+	if max <= 0 || len(s) <= max {
+		return s
+	}
+
+	return s[:max] + "...(truncated)"
 }
