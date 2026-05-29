@@ -73,6 +73,11 @@ func Error(message string, fields Fields) {
 	Log(context.Background(), slog.LevelError, message, fields)
 }
 
+func Fatal(message string, fields Fields) {
+	Error(message, fields)
+	os.Exit(1)
+}
+
 func LogHTTPFailure(
 	message string,
 	provider string,
