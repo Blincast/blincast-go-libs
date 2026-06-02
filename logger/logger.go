@@ -75,7 +75,7 @@ func Error(message string, fields Fields) {
 
 func Fatal(message string, fields Fields) {
 	Error(message, fields)
-	os.Exit(1)
+	panic(message)
 }
 
 func LogHTTPFailure(
