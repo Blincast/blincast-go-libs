@@ -78,6 +78,10 @@ func Fatal(message string, fields Fields) {
 	panic(message)
 }
 
+func Warn(message string, fields Fields) {
+	Log(context.Background(), slog.LevelWarn, message, fields)
+}
+
 func LogHTTPFailure(
 	message string,
 	provider string,
