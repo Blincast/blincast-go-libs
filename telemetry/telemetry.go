@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
@@ -90,4 +91,11 @@ func Middleware(next http.Handler) http.Handler {
 
 		span.SetAttributes(semconv.HTTPStatusCodeKey.Int(rw.statusCode))
 	})
+}
+
+// NewClient return an HTTP Client configured to handle requests injecting the traceparent on it.
+func NewClient() *http.Client {
+	return &http.Client{
+		Transport: otelhttp.NewTransport(http.DefaultTransport),
+	}
 }
