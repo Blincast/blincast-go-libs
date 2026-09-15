@@ -99,3 +99,13 @@ func NewClient() *http.Client {
 		Transport: otelhttp.NewTransport(http.DefaultTransport),
 	}
 }
+
+// GetTraceID returns the trace ID from the context. That way we can correlate logs and traces.
+// If no trace ID is found, it return an empty string.
+func GetTraceID(ctx context.Context) string {
+	span := oteltrace.SpanFromContext(ctx)
+	if span.SpanContext().HasTraceID() {
+		return span.SpanContext().TraceID().String()
+	}
+	return ""
+}

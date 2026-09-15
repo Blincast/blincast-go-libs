@@ -1,6 +1,6 @@
 module github.com/Blincast/blincast-go-libs/telemetry
 
-go 1.27.1
+go 1.25.0
 
 require (
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.71.0
