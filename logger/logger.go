@@ -11,10 +11,16 @@ import (
 
 type Fields map[string]any
 
-func New(service string, level slog.Leveler) *slog.Logger {
-	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+func New(service string, level slog.Leveler, getTraceIDFn ...func(context.Context) string) *slog.Logger {
+	var handler slog.Handler
+
+	handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: level,
 	})
+
+	if len(getTraceIDFn) > 0 && getTraceIDFn[0] != nil {
+		handler = NewTraceHandler(handler, getTraceIDFn[0])
+	}
 
 	return slog.New(handler).With(
 		slog.String("service", service),
