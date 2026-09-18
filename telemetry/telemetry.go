@@ -66,7 +66,7 @@ func InitTelemetry(ctx context.Context, cfg Config) (func(context.Context) error
 	return tp.Shutdown, nil
 }
 
-// Middleware to intercept incomming HTTP requests.
+// Middleware to intercept incoming HTTP requests.
 // It handle Trace ID (get if exists or create a new one and inject in the context)
 func Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
