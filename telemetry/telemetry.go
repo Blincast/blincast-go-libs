@@ -16,8 +16,6 @@ import (
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
-const tracerName = "blincast-telemetry-lib"
-
 type Config struct {
 	ServiceName  string
 	CollectorURL string // URL of the OpenTelemetry collector to send traces to
@@ -66,34 +64,13 @@ func InitTelemetry(ctx context.Context, cfg Config) (func(context.Context) error
 	return tp.Shutdown, nil
 }
 
-// Middleware to intercept incoming HTTP requests.
-// It handle Trace ID (get if exists or create a new one and inject in the context)
-func Middleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
-
-		tracer := otel.GetTracerProvider().Tracer(tracerName)
-		ctx, span := tracer.Start(ctx, fmt.Sprintf("%s %s", r.Method, r.URL.Path),
-			oteltrace.WithSpanKind(oteltrace.SpanKindServer),
-		)
-		defer span.End()
-
-		span.SetAttributes(
-			semconv.HTTPMethodKey.String(r.Method),
-			semconv.HTTPTargetKey.String(r.URL.Path),
-			semconv.HTTPUserAgentKey.String(r.UserAgent()),
-		)
-
-		r = r.WithContext(ctx)
-		rw := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
-
-		next.ServeHTTP(rw, r)
-
-		span.SetAttributes(semconv.HTTPStatusCodeKey.Int(rw.statusCode))
-	})
+// NewTelemetryMiddleware returns a new http.Handler to intercept incoming HTTP
+// request context and link observability between different applications.
+func NewTelemetryMiddleware(next http.Handler) http.Handler {
+	return otelhttp.NewHandler(next, "http-request")
 }
 
-// NewClient return an HTTP Client configured to handle requests injecting the traceparent on it.
+// NewClient return an HTTP Client configured to handle requests injecting the traceparent on it through otel transport.
 func NewClient() *http.Client {
 	return &http.Client{
 		Transport: otelhttp.NewTransport(http.DefaultTransport),
