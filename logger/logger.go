@@ -27,8 +27,8 @@ func New(service string, level slog.Leveler, getTraceIDFn ...func(context.Contex
 	)
 }
 
-func Configure(service string, level slog.Leveler) {
-	slog.SetDefault(New(service, level))
+func Configure(service string, level slog.Leveler, getTraceIDFn ...func(context.Context) string) {
+	slog.SetDefault(New(service, level, getTraceIDFn...))
 }
 
 func ParseLevel(value string) (slog.Level, error) {
