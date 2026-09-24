@@ -53,7 +53,9 @@ func NewMetricServer() *http.Server {
 	)
 
 	mux := http.NewServeMux()
-	mux.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+	mux.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{
+		EnableOpenMetrics: true,
+	}))
 
 	server := &http.Server{
 		Addr:         ":2112",
@@ -76,13 +78,16 @@ func MetricsMiddleware(next http.Handler) http.Handler {
 		duration := time.Since(start).Seconds()
 		statusStr := fmt.Sprintf("%d", rw.statusCode)
 
+		counter := httpRequestsTotal.WithLabelValues(r.Method, r.URL.Path, statusStr)
+
 		if traceID := GetTraceID(r.Context()); traceID != "" {
-			httpRequestsTotal.WithLabelValues(r.Method, r.URL.Path, statusStr).(prometheus.ExemplarObserver).ObserveWithExemplar(
-				1,
-				prometheus.Labels{"trace_id": traceID},
-			)
+			if observer, ok := counter.(prometheus.ExemplarObserver); ok {
+				observer.ObserveWithExemplar(1, prometheus.Labels{"trace_id": traceID})
+			} else {
+				counter.Inc()
+			}
 		} else {
-			httpRequestsTotal.WithLabelValues(r.Method, r.URL.Path, statusStr).Inc()
+			counter.Inc()
 		}
 
 		httpRequestDuration.WithLabelValues(r.Method, r.URL.Path).Observe(duration)
