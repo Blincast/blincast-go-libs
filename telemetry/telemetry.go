@@ -21,16 +21,6 @@ type Config struct {
 	CollectorURL string // URL of the OpenTelemetry collector to send traces to
 }
 
-type responseWriter struct {
-	http.ResponseWriter
-	statusCode int
-}
-
-func (rw *responseWriter) WriteHeader(code int) {
-	rw.statusCode = code
-	rw.ResponseWriter.WriteHeader(code)
-}
-
 // Configure the OpenTelemetry SDK with a gRPC exporter to send traces to the specified collector URL.
 // Traces are sent in batches with a timeout of 5 seconds before sending each batch or reach limit of 512 spans.
 func InitTelemetry(ctx context.Context, cfg Config) (func(context.Context) error, error) {
