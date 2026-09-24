@@ -79,18 +79,18 @@ func MetricsMiddleware(next http.Handler) http.Handler {
 		statusStr := fmt.Sprintf("%d", rw.statusCode)
 
 		counter := httpRequestsTotal.WithLabelValues(r.Method, r.URL.Path, statusStr)
+		observer := httpRequestDuration.WithLabelValues(r.Method, r.URL.Path)
 
 		if traceID := GetTraceID(r.Context()); traceID != "" {
-			if observer, ok := counter.(prometheus.ExemplarObserver); ok {
-				observer.ObserveWithExemplar(1, prometheus.Labels{"trace_id": traceID})
+			if eo, ok := observer.(prometheus.ExemplarObserver); ok {
+				eo.ObserveWithExemplar(duration, prometheus.Labels{"trace_id": traceID})
 			} else {
-				counter.Inc()
+				observer.Observe(duration)
 			}
 		} else {
-			counter.Inc()
+			observer.Observe(duration)
 		}
-
-		httpRequestDuration.WithLabelValues(r.Method, r.URL.Path).Observe(duration)
+		counter.Inc()
 	})
 }
 
@@ -103,17 +103,21 @@ func GinMetricsMiddleware() gin.HandlerFunc {
 
 		duration := time.Since(start).Seconds()
 		status := strconv.Itoa(c.Writer.Status())
-
 		ctx := c.Request.Context()
+
+		counter := httpRequestsTotal.WithLabelValues(c.Request.Method, c.FullPath(), status)
+		observer := httpRequestDuration.WithLabelValues(c.Request.Method, c.FullPath())
+
 		if traceID := GetTraceID(ctx); traceID != "" {
-			httpRequestsTotal.WithLabelValues(c.Request.Method, c.FullPath(), status).(prometheus.ExemplarObserver).ObserveWithExemplar(
-				1,
-				prometheus.Labels{"trace_id": traceID},
-			)
+			if eo, ok := observer.(prometheus.ExemplarObserver); ok {
+				eo.ObserveWithExemplar(duration, prometheus.Labels{"trace_id": traceID})
+			} else {
+				observer.Observe(duration)
+			}
 		} else {
-			httpRequestsTotal.WithLabelValues(c.Request.Method, c.FullPath(), status).Inc()
+			observer.Observe(duration)
 		}
 
-		httpRequestDuration.WithLabelValues(c.Request.Method, c.FullPath()).Observe(duration)
+		counter.Inc()
 	}
 }
