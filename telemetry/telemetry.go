@@ -77,6 +77,23 @@ func NewClient() *http.Client {
 	}
 }
 
+// WrapClient receives an existing HTTP client and wraps it with OpenTelemetry instrumentation.
+// This allows the client to automatically propagate trace context and collect telemetry data for outgoing requests.
+func WrapClient(client *http.Client) *http.Client {
+	if client == nil {
+		client = &http.Client{}
+	}
+
+	baseTransport := client.Transport
+	if baseTransport == nil {
+		baseTransport = http.DefaultTransport
+	}
+
+	client.Transport = otelhttp.NewTransport(baseTransport)
+
+	return client
+}
+
 // GetTraceID returns the trace ID from the context. That way we can correlate logs and traces.
 // If no trace ID is found, it return an empty string.
 func GetTraceID(ctx context.Context) string {
