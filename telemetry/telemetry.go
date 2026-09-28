@@ -84,12 +84,16 @@ func WrapClient(client *http.Client) *http.Client {
 	return client
 }
 
-// GetTraceID returns the trace ID from the context. That way we can correlate logs and traces.
-// If no trace ID is found, it return an empty string.
-func GetTraceID(ctx context.Context) string {
-	span := oteltrace.SpanFromContext(ctx)
-	if span.SpanContext().HasTraceID() {
-		return span.SpanContext().TraceID().String()
+// GetTraceFields returns trace_id and span_id from the active span in ctx, suitable for
+// logger.Configure's getTraceFieldsFn parameter so log lines carry both. Returns nil when
+// there's no valid span in ctx.
+func GetTraceFields(ctx context.Context) map[string]string {
+	sc := oteltrace.SpanFromContext(ctx).SpanContext()
+	if !sc.IsValid() {
+		return nil
 	}
-	return ""
+	return map[string]string{
+		"trace_id": sc.TraceID().String(),
+		"span_id":  sc.SpanID().String(),
+	}
 }

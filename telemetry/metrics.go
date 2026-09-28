@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -10,7 +11,18 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
+
+// getTraceID returns the trace ID from the context, for tagging Prometheus exemplars below.
+// If no trace ID is found, it return an empty string. Internal use only.
+func getTraceID(ctx context.Context) string {
+	span := oteltrace.SpanFromContext(ctx)
+	if span.SpanContext().HasTraceID() {
+		return span.SpanContext().TraceID().String()
+	}
+	return ""
+}
 
 type responseWriter struct {
 	http.ResponseWriter
@@ -81,7 +93,7 @@ func MetricsMiddleware(next http.Handler) http.Handler {
 		counter := httpRequestsTotal.WithLabelValues(r.Method, r.URL.Path, statusStr)
 		observer := httpRequestDuration.WithLabelValues(r.Method, r.URL.Path)
 
-		if traceID := GetTraceID(r.Context()); traceID != "" {
+		if traceID := getTraceID(r.Context()); traceID != "" {
 			if eo, ok := observer.(prometheus.ExemplarObserver); ok {
 				eo.ObserveWithExemplar(duration, prometheus.Labels{"trace_id": traceID})
 			} else {
@@ -108,7 +120,7 @@ func GinMetricsMiddleware() gin.HandlerFunc {
 		counter := httpRequestsTotal.WithLabelValues(c.Request.Method, c.FullPath(), status)
 		observer := httpRequestDuration.WithLabelValues(c.Request.Method, c.FullPath())
 
-		if traceID := GetTraceID(ctx); traceID != "" {
+		if traceID := getTraceID(ctx); traceID != "" {
 			if eo, ok := observer.(prometheus.ExemplarObserver); ok {
 				eo.ObserveWithExemplar(duration, prometheus.Labels{"trace_id": traceID})
 			} else {
