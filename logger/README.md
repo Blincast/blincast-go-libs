@@ -35,15 +35,17 @@ if err != nil {
     level = slog.LevelInfo // fall back instead of failing startup on a bad env value
 }
 
-logger.Configure(serviceName, level, telemetry.GetTraceID) // 3rd arg optional, see "Pairing with telemetry" below
+logger.Configure(serviceName, level, telemetry.GetTraceFields) // 3rd arg optional, see "Pairing with telemetry" below
 
 logger.Info("service started", logger.Fields{
     "event":    "service_started",
     "logLevel": logLevel,
 })
 
+// Inside a request handler, use the *Context variants with the request's own ctx
+// so the log line picks up trace_id/span_id from the active span:
 if err := daspiAPI.UpdateGuestData(room, guestName, "S", hotelID); err != nil {
-    logger.Error("failed to update guest data on daspi", logger.Fields{
+    logger.ErrorContext(c.Request.Context(), "failed to update guest data on daspi", logger.Fields{
         "event":     "daspi_update_guest_data_failed",
         "bookingId": bookingID,
         "room":      room,
@@ -61,25 +63,27 @@ if err := daspiAPI.UpdateGuestData(room, guestName, "S", hotelID); err != nil {
 
 ## API
 
-- `New(service, level, getTraceIDFn...) *slog.Logger` — build a logger without installing it as the global default.
-- `Configure(service, level, getTraceIDFn...)` — build and install as `slog.Default()`. This is what every real call site uses (`New` is only needed if you want a logger instance without touching the global default).
+- `New(service, level, getTraceFieldsFn...) *slog.Logger` — build a logger without installing it as the global default.
+- `Configure(service, level, getTraceFieldsFn...)` — build and install as `slog.Default()`. This is what every real call site uses (`New` is only needed if you want a logger instance without touching the global default).
 - `ParseLevel(value string) (slog.Level, error)` — parse a level from config/env; empty string returns `Info` with no error.
-- `Fields map[string]any`, `Log(ctx, level, msg, fields)`, `Info`/`Warn`/`Error`(msg, fields)`, `Fatal(msg, fields)` (logs at `Error`, then panics).
+- `Fields map[string]any`, `Log(ctx, level, msg, fields)`.
+- `Info`/`Warn`/`Error`(msg, fields)`, `Fatal(msg, fields)` (logs at `Error`, then panics) — no `ctx`, always `context.Background()` under the hood, so no trace/span correlation. Use these when there's genuinely no request/operation context available (e.g. at startup, before a request is in flight).
+- `InfoContext`/`WarnContext`/`ErrorContext`(ctx, msg, fields)`, `FatalContext(ctx, msg, fields)` — same as above but take `ctx` and thread it to `Log`, so a trace/span active on `ctx` gets attached to the line via `Configure`'s `getTraceFieldsFn`. **Prefer these whenever a request-scoped `ctx` is available** (e.g. `c.Request.Context()` in a Gin handler) — this is what actually makes trace correlation work.
 - `LogHTTPFailure(message, provider, event, reqData, resp, respBody, err)` — standard shape for logging a failed upstream HTTP call; truncates the response body via `Truncate`.
 - `Truncate(s, max)` — truncate a string (e.g. a response body) to `max` chars before logging it.
-- `TraceHandler` / `NewTraceHandler(next slog.Handler, fn func(context.Context) string)` — wraps a `slog.Handler` to inject `trace_id` into every record; this is what `Configure`'s `getTraceIDFn` argument wires up internally.
+- `TraceHandler` / `NewTraceHandler(next slog.Handler, fn func(context.Context) map[string]string)` — wraps a `slog.Handler` to inject whatever fields `fn` returns (e.g. `trace_id`, `span_id`) into every record; this is what `Configure`'s `getTraceFieldsFn` argument wires up internally.
 
-`Warn`, `Fatal`, `Log`, `LogHTTPFailure`, and `Truncate` exist and work, but aren't exercised anywhere in the current reference integration (`erbon` only calls `ParseLevel`, `Configure`, `Info`, and `Error`) — worth knowing if you're looking for a real example of one of them and don't find one yet.
+`Warn`, `Fatal`, `Log`, `LogHTTPFailure`, and `Truncate` exist and work, but aren't exercised anywhere in the current reference integration (`erbon` only calls `ParseLevel`, `Configure`, `Info`, `InfoContext`, `Error`, and `ErrorContext`) — worth knowing if you're looking for a real example of one of them and don't find one yet.
 
 ## Pairing with `telemetry` (optional)
 
-`Configure`'s third argument is `getTraceIDFn func(context.Context) string` — pass it `telemetry.GetTraceID` (from the sibling [`telemetry`](../telemetry/README.md) package) and every log line picks up the active `trace_id`:
+`Configure`'s third argument is `getTraceFieldsFn func(context.Context) map[string]string` — pass it `telemetry.GetTraceFields` (from the sibling [`telemetry`](../telemetry/README.md) package) and every log line written through `Log`/`InfoContext`/`WarnContext`/`ErrorContext`/`FatalContext` picks up the active `trace_id` and `span_id`:
 
 ```go
-logger.Configure(serviceName, level, telemetry.GetTraceID)
+logger.Configure(serviceName, level, telemetry.GetTraceFields)
 ```
 
-`logger` has no Go-module dependency on `telemetry` (or vice versa) — this is purely a call-site pairing. Omit the third argument entirely and `Configure` still works, just without `trace_id` on log lines.
+`logger` has no Go-module dependency on `telemetry` (or vice versa) — the callback type is a plain `func(context.Context) map[string]string`, not a named type from either package, so this is purely a call-site pairing, deliberately kept that way so each library can be used (and changed) without the other's dependencies. Omit the third argument entirely and `Configure` still works, just without those fields on log lines. Note this pairing only takes effect through the `*Context` functions — the plain `Info`/`Warn`/`Error`/`Fatal` never carry a real `ctx`, so they never pick up `trace_id`/`span_id` even with `Configure`'s third argument set.
 
 ## Releasing a new version
 

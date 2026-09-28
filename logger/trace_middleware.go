@@ -7,22 +7,25 @@ import (
 
 type TraceHandler struct {
 	slog.Handler
-	getTraceIDFunc func(context.Context) string
+	getTraceFieldsFunc func(context.Context) map[string]string
 }
 
-// NewTraceHandler returns a TraceHandler instance that wraps the provided slog.Handler and adds the trace ID to the log records.
-func NewTraceHandler(next slog.Handler, fn func(context.Context) string) *TraceHandler {
+// NewTraceHandler returns a TraceHandler instance that wraps the provided slog.Handler and adds
+// whatever context-derived fields fn returns (e.g. trace_id, span_id) to the log records.
+func NewTraceHandler(next slog.Handler, fn func(context.Context) map[string]string) *TraceHandler {
 	return &TraceHandler{
-		Handler:        next,
-		getTraceIDFunc: fn,
+		Handler:            next,
+		getTraceFieldsFunc: fn,
 	}
 }
 
-// Handle executa a interceptação do log antes dele ser impresso no console
+// Handle method gets telemetry fields from context and send it to logs.
 func (h *TraceHandler) Handle(ctx context.Context, r slog.Record) error {
-	if h.getTraceIDFunc != nil {
-		if traceID := h.getTraceIDFunc(ctx); traceID != "" {
-			r.AddAttrs(slog.String("trace_id", traceID))
+	if h.getTraceFieldsFunc != nil {
+		for key, value := range h.getTraceFieldsFunc(ctx) {
+			if value != "" {
+				r.AddAttrs(slog.String(key, value))
+			}
 		}
 	}
 	return h.Handler.Handle(ctx, r)

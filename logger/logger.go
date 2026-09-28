@@ -11,15 +11,15 @@ import (
 
 type Fields map[string]any
 
-func New(service string, level slog.Leveler, getTraceIDFn ...func(context.Context) string) *slog.Logger {
+func New(service string, level slog.Leveler, getTraceFieldsFn ...func(context.Context) map[string]string) *slog.Logger {
 	var handler slog.Handler
 
 	handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: level,
 	})
 
-	if len(getTraceIDFn) > 0 && getTraceIDFn[0] != nil {
-		handler = NewTraceHandler(handler, getTraceIDFn[0])
+	if len(getTraceFieldsFn) > 0 && getTraceFieldsFn[0] != nil {
+		handler = NewTraceHandler(handler, getTraceFieldsFn[0])
 	}
 
 	return slog.New(handler).With(
@@ -27,8 +27,8 @@ func New(service string, level slog.Leveler, getTraceIDFn ...func(context.Contex
 	)
 }
 
-func Configure(service string, level slog.Leveler, getTraceIDFn ...func(context.Context) string) {
-	slog.SetDefault(New(service, level, getTraceIDFn...))
+func Configure(service string, level slog.Leveler, getTraceFieldsFn ...func(context.Context) map[string]string) {
+	slog.SetDefault(New(service, level, getTraceFieldsFn...))
 }
 
 func ParseLevel(value string) (slog.Level, error) {
@@ -86,6 +86,29 @@ func Fatal(message string, fields Fields) {
 
 func Warn(message string, fields Fields) {
 	Log(context.Background(), slog.LevelWarn, message, fields)
+}
+
+// InfoContext logs at Info level using ctx, so a trace/span active on ctx (see Configure's
+// getTraceFieldsFn) is attached to the log line. Prefer this over Info wherever a request-scoped
+// ctx is available.
+func InfoContext(ctx context.Context, message string, fields Fields) {
+	Log(ctx, slog.LevelInfo, message, fields)
+}
+
+// WarnContext is Warn's context-aware counterpart. See InfoContext.
+func WarnContext(ctx context.Context, message string, fields Fields) {
+	Log(ctx, slog.LevelWarn, message, fields)
+}
+
+// ErrorContext is Error's context-aware counterpart. See InfoContext.
+func ErrorContext(ctx context.Context, message string, fields Fields) {
+	Log(ctx, slog.LevelError, message, fields)
+}
+
+// FatalContext is Fatal's context-aware counterpart. See InfoContext.
+func FatalContext(ctx context.Context, message string, fields Fields) {
+	ErrorContext(ctx, message, fields)
+	panic(message)
 }
 
 func LogHTTPFailure(
