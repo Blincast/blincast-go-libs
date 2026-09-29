@@ -97,7 +97,7 @@ func Warn(message string, fields Fields) {
 	Log(context.Background(), slog.LevelWarn, message, fields)
 }
 
-// InfoContext logs at Info level using ctx, so a trace/span active on ctx (see Configure's
+// InfoContext logs at Info level using ctx, so a trace/span active on ctx (see NewWithTraces's
 // getTraceFieldsFn) is attached to the log line. Prefer this over Info wherever a request-scoped
 // ctx is available.
 func InfoContext(ctx context.Context, message string, fields Fields) {

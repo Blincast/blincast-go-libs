@@ -19,7 +19,7 @@ func NewTraceHandler(next slog.Handler, fn func(context.Context) map[string]stri
 	}
 }
 
-// Handle method gets telemetry fields from context and send it to logs.
+// Handle gets telemetry fields from the context and adds them to the log record.
 func (h *TraceHandler) Handle(ctx context.Context, r slog.Record) error {
 	if h.getTraceFieldsFunc != nil {
 		for key, value := range h.getTraceFieldsFunc(ctx) {
@@ -37,7 +37,7 @@ func (h *TraceHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	return &TraceHandler{Handler: h.Handler.WithAttrs(attrs), getTraceFieldsFunc: h.getTraceFieldsFunc}
 }
 
-// Rewrap WithGroup method from slogHandler. See WithAttrs for further details.
+// WithGroup re-wraps slog.Handler.WithGroup the same way WithAttrs does. See WithAttrs for details.
 func (h *TraceHandler) WithGroup(name string) slog.Handler {
 	return &TraceHandler{Handler: h.Handler.WithGroup(name), getTraceFieldsFunc: h.getTraceFieldsFunc}
 }

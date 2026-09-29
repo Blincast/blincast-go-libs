@@ -21,8 +21,9 @@ type Config struct {
 	CollectorURL string // URL of the OpenTelemetry collector to send traces to
 }
 
-// Configure the OpenTelemetry SDK with a gRPC exporter to send traces to the specified collector URL.
-// Traces are sent in batches with a timeout of 5 seconds before sending each batch or reach limit of 512 spans.
+// InitTelemetry configures the OpenTelemetry SDK with a gRPC exporter to send traces to the
+// specified collector URL. Traces are batched and sent every 5 seconds, or as soon as a batch
+// reaches 512 spans, whichever comes first.
 func InitTelemetry(ctx context.Context, cfg Config) (func(context.Context) error, error) {
 	exporter, err := otlptracegrpc.New(ctx,
 		otlptracegrpc.WithInsecure(),
@@ -54,13 +55,14 @@ func InitTelemetry(ctx context.Context, cfg Config) (func(context.Context) error
 	return tp.Shutdown, nil
 }
 
-// NewTelemetryMiddleware returns a new http.Handler to intercept incoming HTTP
-// request context and link observability between different applications.
+// NewTelemetryMiddleware wraps next with OpenTelemetry HTTP instrumentation, so incoming
+// requests are traced.
 func NewTelemetryMiddleware(next http.Handler) http.Handler {
 	return otelhttp.NewHandler(next, "http-request")
 }
 
-// NewClient return an HTTP Client configured to handle requests injecting the traceparent on it through otel transport.
+// NewClient returns an *http.Client whose transport injects the traceparent header into
+// outgoing requests via OTel.
 func NewClient() *http.Client {
 	return &http.Client{
 		Transport: otelhttp.NewTransport(http.DefaultTransport),
@@ -85,7 +87,7 @@ func WrapClient(client *http.Client) *http.Client {
 }
 
 // GetTraceFields returns trace_id and span_id from the active span in ctx, suitable for
-// logger.Configure's getTraceFieldsFn parameter so log lines carry both. Returns nil when
+// logger.NewWithTraces's getTraceFieldsFn parameter so log lines carry both. Returns nil when
 // there's no valid span in ctx.
 func GetTraceFields(ctx context.Context) map[string]string {
 	sc := oteltrace.SpanFromContext(ctx).SpanContext()

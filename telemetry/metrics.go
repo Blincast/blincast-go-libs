@@ -15,7 +15,7 @@ import (
 )
 
 // getTraceID returns the trace ID from the context, for tagging Prometheus exemplars below.
-// If no trace ID is found, it return an empty string. Internal use only.
+// If no trace ID is found, it returns an empty string. Internal use only.
 func getTraceID(ctx context.Context) string {
 	span := oteltrace.SpanFromContext(ctx)
 	if span.SpanContext().HasTraceID() {
@@ -53,8 +53,8 @@ var (
 	)
 )
 
-// Returns an instance of *http.Server on port 2112 to expose metrics for Prometheus scraping.
-// It must be called in a separate goroutine to avoid blocking the main application execution flow.
+// NewMetricServer returns an *http.Server on the given port, exposing metrics for Prometheus
+// scraping. It must be called in a separate goroutine to avoid blocking the main application.
 func NewMetricServer(port string) *http.Server {
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(
@@ -80,7 +80,7 @@ func NewMetricServer(port string) *http.Server {
 	return server
 }
 
-// Creates a middleware to configure collecting total requests and duration metrics.
+// MetricsMiddleware wraps next, collecting total requests and duration metrics for it.
 func MetricsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -107,7 +107,7 @@ func MetricsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// Creates a middleware to configure collecting total requests and duration metrics with Gin.
+// GinMetricsMiddleware is MetricsMiddleware's Gin counterpart, collecting the same metrics.
 func GinMetricsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
