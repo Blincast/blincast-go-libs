@@ -11,24 +11,29 @@ import (
 
 type Fields map[string]any
 
-func New(service string, level slog.Leveler, getTraceFieldsFn ...func(context.Context) map[string]string) *slog.Logger {
-	var handler slog.Handler
-
-	handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+func newHandler(level slog.Leveler) slog.Handler {
+	return slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: level,
 	})
+}
 
-	if len(getTraceFieldsFn) > 0 && getTraceFieldsFn[0] != nil {
-		handler = NewTraceHandler(handler, getTraceFieldsFn[0])
-	}
-
+func setupSlog(handler slog.Handler, service string) *slog.Logger {
 	return slog.New(handler).With(
 		slog.String("service", service),
 	)
 }
 
-func Configure(service string, level slog.Leveler, getTraceFieldsFn ...func(context.Context) map[string]string) {
-	slog.SetDefault(New(service, level, getTraceFieldsFn...))
+func New(service string, level slog.Leveler) *slog.Logger {
+	logHandler := newHandler(level)
+
+	return setupSlog(logHandler, service)
+}
+
+func NewWithTraces(service string, level slog.Leveler, getTraceFieldsFn func(context.Context) map[string]string) *slog.Logger {
+	logHandler := newHandler(level)
+	traceHandler := NewTraceHandler(logHandler, getTraceFieldsFn)
+
+	return setupSlog(traceHandler, service)
 }
 
 func ParseLevel(value string) (slog.Level, error) {
