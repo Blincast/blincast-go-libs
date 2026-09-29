@@ -55,7 +55,7 @@ var (
 
 // Returns an instance of *http.Server on port 2112 to expose metrics for Prometheus scraping.
 // It must be called in a separate goroutine to avoid blocking the main application execution flow.
-func NewMetricServer() *http.Server {
+func NewMetricServer(port string) *http.Server {
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(
 		collectors.NewGoCollector(),
@@ -69,8 +69,9 @@ func NewMetricServer() *http.Server {
 		EnableOpenMetrics: true,
 	}))
 
+	addr := ":" + port
 	server := &http.Server{
-		Addr:         ":2112",
+		Addr:         addr,
 		Handler:      mux,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 5 * time.Second,
