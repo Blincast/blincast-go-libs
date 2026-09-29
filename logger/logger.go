@@ -11,18 +11,33 @@ import (
 
 type Fields map[string]any
 
-func New(service string, level slog.Leveler) *slog.Logger {
-	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+func newHandler(level slog.Leveler) slog.Handler {
+	return slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: level,
 	})
+}
 
+func setupSlog(handler slog.Handler, service string) *slog.Logger {
 	return slog.New(handler).With(
 		slog.String("service", service),
 	)
 }
 
-func Configure(service string, level slog.Leveler) {
-	slog.SetDefault(New(service, level))
+// New returns a JSON-logging *slog.Logger for service, filtered at level.
+func New(service string, level slog.Leveler) *slog.Logger {
+	logHandler := newHandler(level)
+
+	return setupSlog(logHandler, service)
+}
+
+// NewWithTraces is New with a TraceHandler in front of the JSON handler: on every log record it
+// calls getTraceFieldsFn with the record's context and attaches whatever fields it returns (e.g.
+// trace_id, span_id). Use blincast-go-libs/telemetry's GetTraceFields.
+func NewWithTraces(service string, level slog.Leveler, getTraceFieldsFn func(context.Context) map[string]string) *slog.Logger {
+	logHandler := newHandler(level)
+	traceHandler := NewTraceHandler(logHandler, getTraceFieldsFn)
+
+	return setupSlog(traceHandler, service)
 }
 
 func ParseLevel(value string) (slog.Level, error) {
@@ -80,6 +95,29 @@ func Fatal(message string, fields Fields) {
 
 func Warn(message string, fields Fields) {
 	Log(context.Background(), slog.LevelWarn, message, fields)
+}
+
+// InfoContext logs at Info level using ctx, so a trace/span active on ctx (see NewWithTraces's
+// getTraceFieldsFn) is attached to the log line. Prefer this over Info wherever a request-scoped
+// ctx is available.
+func InfoContext(ctx context.Context, message string, fields Fields) {
+	Log(ctx, slog.LevelInfo, message, fields)
+}
+
+// WarnContext is Warn's context-aware counterpart. See InfoContext.
+func WarnContext(ctx context.Context, message string, fields Fields) {
+	Log(ctx, slog.LevelWarn, message, fields)
+}
+
+// ErrorContext is Error's context-aware counterpart. See InfoContext.
+func ErrorContext(ctx context.Context, message string, fields Fields) {
+	Log(ctx, slog.LevelError, message, fields)
+}
+
+// FatalContext is Fatal's context-aware counterpart. See InfoContext.
+func FatalContext(ctx context.Context, message string, fields Fields) {
+	ErrorContext(ctx, message, fields)
+	panic(message)
 }
 
 func LogHTTPFailure(
