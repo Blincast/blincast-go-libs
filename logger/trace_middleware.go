@@ -30,3 +30,14 @@ func (h *TraceHandler) Handle(ctx context.Context, r slog.Record) error {
 	}
 	return h.Handler.Handle(ctx, r)
 }
+
+// WithAttrs and WithGroup re-wrap the underlying handler's result in a new TraceHandler so the
+// trace-field injection in Handle survives calls to Logger.With/WithGroup
+func (h *TraceHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &TraceHandler{Handler: h.Handler.WithAttrs(attrs), getTraceFieldsFunc: h.getTraceFieldsFunc}
+}
+
+// Rewrap WithGroup method from slogHandler. See WithAttrs for further details.
+func (h *TraceHandler) WithGroup(name string) slog.Handler {
+	return &TraceHandler{Handler: h.Handler.WithGroup(name), getTraceFieldsFunc: h.getTraceFieldsFunc}
+}
