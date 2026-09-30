@@ -39,7 +39,7 @@ func InitTelemetry(ctx context.Context, cfg Config) (func(context.Context) error
 		resource.WithAttributes(semconv.ServiceNameKey.String(cfg.ServiceName)),
 	)
 	if err != nil {
-		return noop, fmt.Errorf("failed to create resource: %w", err)
+		return exporter.Shutdown, fmt.Errorf("failed to create resource: %w", err)
 	}
 
 	tp := sdktrace.NewTracerProvider(
