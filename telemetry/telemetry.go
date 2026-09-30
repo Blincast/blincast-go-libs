@@ -25,19 +25,21 @@ type Config struct {
 // specified collector URL. Traces are batched and sent every 5 seconds, or as soon as a batch
 // reaches 512 spans, whichever comes first.
 func InitTelemetry(ctx context.Context, cfg Config) (func(context.Context) error, error) {
+	noop := func(context.Context) error { return nil }
+
 	exporter, err := otlptracegrpc.New(ctx,
 		otlptracegrpc.WithInsecure(),
 		otlptracegrpc.WithEndpoint(cfg.CollectorURL),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
+		return noop, fmt.Errorf("failed to create trace exporter: %w", err)
 	}
 
 	res, err := resource.New(ctx,
 		resource.WithAttributes(semconv.ServiceNameKey.String(cfg.ServiceName)),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create resource: %w", err)
+		return noop, fmt.Errorf("failed to create resource: %w", err)
 	}
 
 	tp := sdktrace.NewTracerProvider(

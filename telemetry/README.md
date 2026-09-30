@@ -73,7 +73,7 @@ http.ListenAndServe(":8080", handler)
 
 ## API
 
-- `Config{ServiceName, CollectorURL}` / `InitTelemetry(ctx, cfg) (shutdown func(context.Context) error, err error)` — sets up the `TracerProvider` with an OTLP/gRPC exporter (insecure, always-sample, 5s batch timeout), sets the global propagator (`TraceContext` + `Baggage`). Returns a shutdown func to defer.
+- `Config{ServiceName, CollectorURL}` / `InitTelemetry(ctx, cfg) (shutdown func(context.Context) error, err error)` — sets up the `TracerProvider` with an OTLP/gRPC exporter (insecure, always-sample, 5s batch timeout), sets the global propagator (`TraceContext` + `Baggage`). Returns a shutdown func to defer — never `nil`, even when an error is returned, so `defer shutdown(ctx)` is always safe.
 - `GetTraceFields(ctx) map[string]string` — reads `trace_id` and `span_id` off the current span; `nil` if none. Feed this to `logger.Configure`'s `getTraceFieldsFn` argument to correlate logs with traces — see [`logger/README.md`](../logger/README.md)'s "Pairing with telemetry" section. (There's also an unexported `getTraceID` used internally by `MetricsMiddleware`/`GinMetricsMiddleware` to tag Prometheus exemplars with just the trace ID — not part of the public API.)
 - `NewClient()` / `WrapClient(client *http.Client) *http.Client` — an `http.Client` (new, or an existing one wrapped) whose `Transport` injects the `traceparent` header on outgoing requests.
 - `NewTelemetryMiddleware(next http.Handler) http.Handler` — plain `net/http` tracing middleware (`otelhttp`), for non-Gin services.
