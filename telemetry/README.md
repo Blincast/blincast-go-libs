@@ -40,12 +40,12 @@ slog.SetDefault(logger.NewWithTraces(serviceName, level, telemetry.GetTraceField
 
 shutdown, err := telemetry.InitTelemetry(ctx, telemetry.Config{
     ServiceName:  serviceName,
-    CollectorURL: os.Getenv("OTEL_COLLECTOR_URL"), // host:port, no scheme (gRPC), e.g. localhost:4317
+    CollectorURL: os.Getenv("OTEL_COLLECTOR_URL"), // e.g. localhost:4317
 })
 if err != nil {
-    logger.Error("failed to initialize telemetry", logger.Fields{"error": err.Error()}) // log and keep going: telemetry must not stop the service
+    logger.Error("failed to initialize telemetry", logger.Fields{"error": err.Error()})
 }
-defer shutdown(ctx) // safe even when err != nil
+defer shutdown(ctx)
 
 go telemetry.NewMetricServer(os.Getenv("METRICS_PORT")).ListenAndServe() // must run in a goroutine: ListenAndServe blocks, and main() still has to start the actual service
 
@@ -75,11 +75,11 @@ handler = telemetry.MetricsMiddleware(handler)       // http_requests_total / ht
 http.ListenAndServe(":8080", handler)
 ```
 
-This variant is for services whose router isn't Gin. Note that the module itself still depends on Gin (`GinMetricsMiddleware` lives in the same package), so Gin ends up in every consumer's module graph either way. Don't register both the Gin and `net/http` middlewares on the same service; pick whichever one matches the router actually in use.
+This variant is for services whose router isn't Gin. Don't register both the Gin and `net/http` middlewares on the same service; pick whichever one matches the router actually in use.
 
 ## API
 
-- `Config{ServiceName, CollectorURL}` / `InitTelemetry(ctx, cfg) (shutdown func(context.Context) error, err error)` — sets up the `TracerProvider` with an OTLP/gRPC exporter (insecure, always-sample, 5s batch timeout), sets the global propagator (`TraceContext` + `Baggage`). Returns a shutdown func to defer — never `nil`, even when an error is returned, so `defer shutdown(ctx)` is always safe.
+- `Config{ServiceName, CollectorURL}` / `InitTelemetry(ctx, cfg) (shutdown func(context.Context) error, err error)` — sets up the `TracerProvider` with an OTLP/gRPC exporter (insecure, always-sample, 5s batch timeout), sets the global propagator (`TraceContext` + `Baggage`). Returns a shutdown func to defer.
 - `GetTraceFields(ctx) map[string]string` — reads `trace_id` and `span_id` off the current span; `nil` if none. Feed this to `logger.NewWithTraces`'s `getTraceFieldsFn` argument (`slog.SetDefault(logger.NewWithTraces(serviceName, level, telemetry.GetTraceFields))`) to correlate logs with traces — see [`logger/README.md`](../logger/README.md)'s "Pairing with telemetry" section. (There's also an unexported `getTraceID` used internally by `MetricsMiddleware`/`GinMetricsMiddleware` to tag Prometheus exemplars with just the trace ID — not part of the public API.)
 - `NewClient()` / `WrapClient(client *http.Client) *http.Client` — an `http.Client` (new, or an existing one wrapped) whose `Transport` injects the `traceparent` header on outgoing requests.
 - `NewTelemetryMiddleware(next http.Handler) http.Handler` — plain `net/http` tracing middleware (`otelhttp`), for non-Gin services.
@@ -89,7 +89,7 @@ This variant is for services whose router isn't Gin. Note that the module itself
 ## Steps
 
 1. Add `OTEL_COLLECTOR_URL` and `METRICS_PORT` to the service's env (`.env.example`, deployment config). `OTEL_COLLECTOR_URL` will mostly be the default `alloy:4317` (Alloy's OTLP gRPC receiver) through the docker network; `METRICS_PORT` is usually `2112`, the port Prometheus scrapes.
-2. In `main.go`, call `slog.SetDefault(logger.NewWithTraces(serviceName, level, telemetry.GetTraceFields))` before anything from this lib, so its logs carry the service's `service` field (several services share the same server, so logs without it can't be traced back to one). Then build a `context.Background()` and call `telemetry.InitTelemetry` + `defer shutdown(ctx)`. On error, log it and keep going instead of exiting — the returned `shutdown` is still safe to defer.
+2. In `main.go`, call `slog.SetDefault(logger.NewWithTraces(serviceName, level, telemetry.GetTraceFields))` before anything from this lib, so its logs carry the service's `service` field (several services share the same server, so logs without it can't be traced back to one). Then build a `context.Background()` and call `telemetry.InitTelemetry` + `defer shutdown(ctx)`.
 3. Start `telemetry.NewMetricServer(port)` **in a goroutine**: `go telemetry.NewMetricServer(os.Getenv("METRICS_PORT")).ListenAndServe()`. Its `ListenAndServe()` blocks for as long as the server runs, same as any `http.Server` — calling it directly (without `go`) on the main goroutine would freeze `main()` right there and the rest of the service (the Gin router, etc.) would never start.
 4. The `slog.SetDefault` from step 2 is also what lets log lines carry the active trace ID and span ID. This alone isn't enough, though — it only takes effect on logs written via `logger.InfoContext`/`WarnContext`/`ErrorContext`/`FatalContext`, so request-scoped logging needs to use those instead of the plain `Info`/`Warn`/`Error`/`Fatal` — see `logger/README.md`'s "Pairing with telemetry" section.
 5. Register the tracing and metrics middlewares on the Gin router: `otelgin.Middleware(serviceName)` and `telemetry.GinMetricsMiddleware()` (for a plain `net/http` router, use `telemetry.NewTelemetryMiddleware` + `telemetry.MetricsMiddleware` instead — see [Usage](#with-plain-nethttp)).
@@ -106,8 +106,6 @@ git tag telemetry/vX.Y.Z
 git push origin telemetry/vX.Y.Z
 gh release create telemetry/vX.Y.Z --title "vX.Y.Z - YYYY/MM/DD - telemetry" --notes "..."
 ```
-
-Never move or reuse an existing tag, even one not used in production yet: consumers' `go.sum` and module caches keep the old content, causing `checksum mismatch` errors or silently stale builds. Cut a new version instead.
 
 Consumers then update to the new tag:
 
