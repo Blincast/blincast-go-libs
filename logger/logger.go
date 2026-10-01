@@ -23,21 +23,21 @@ func setupSlog(handler slog.Handler, service string) *slog.Logger {
 	)
 }
 
-// New returns a JSON-logging *slog.Logger for service, filtered at level.
-func New(service string, level slog.Leveler) *slog.Logger {
+// Initialize builds a JSON logger for service, filtered at level, and installs it as slog's
+// default via slog.SetDefault.
+func Initialize(service string, level slog.Leveler) {
 	logHandler := newHandler(level)
 
-	return setupSlog(logHandler, service)
+	slog.SetDefault(setupSlog(logHandler, service))
 }
 
-// NewWithTraces is New with a TraceHandler in front of the JSON handler: on every log record it
-// calls getTraceFieldsFn with the record's context and attaches whatever fields it returns (e.g.
-// trace_id, span_id). Use blincast-go-libs/telemetry's GetTraceFields.
-func NewWithTraces(service string, level slog.Leveler, getTraceFieldsFn func(context.Context) map[string]string) *slog.Logger {
+// InitializeWithTraces is Initialize, but every log line is enriched with trace_id/span_id from
+// the active span via getTraceFieldsFn (e.g. telemetry.GetTraceFields).
+func InitializeWithTraces(service string, level slog.Leveler, getTraceFieldsFn func(context.Context) map[string]string) {
 	logHandler := newHandler(level)
 	traceHandler := NewTraceHandler(logHandler, getTraceFieldsFn)
 
-	return setupSlog(traceHandler, service)
+	slog.SetDefault(setupSlog(traceHandler, service))
 }
 
 func ParseLevel(value string) (slog.Level, error) {
