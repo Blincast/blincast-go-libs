@@ -3,6 +3,7 @@ package telemetry
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -56,6 +57,12 @@ var (
 // NewMetricServer returns an *http.Server on the given port, exposing metrics for Prometheus
 // scraping. It must be called in a separate goroutine to avoid blocking the main application.
 func NewMetricServer(port string) *http.Server {
+	if port == "" {
+		slog.Warn("metrics port not set: server will listen on a random port and Prometheus won't be able to scrape it",
+			"event", "metrics_port_missing",
+		)
+	}
+
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(
 		collectors.NewGoCollector(),
