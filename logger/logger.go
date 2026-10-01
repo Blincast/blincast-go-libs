@@ -11,6 +11,23 @@ import (
 
 type Fields map[string]any
 
+// Initialize builds a JSON logger for service, filtered at level, and installs it as slog's
+// default via slog.SetDefault.
+func Initialize(service string, level slog.Leveler) {
+	logHandler := newHandler(level)
+
+	slog.SetDefault(setupSlog(logHandler, service))
+}
+
+// InitializeWithTraces is Initialize, but every log line is enriched with trace_id/span_id from
+// the active span via getTraceFieldsFn (e.g. telemetry.GetTraceFields).
+func InitializeWithTraces(service string, level slog.Leveler, getTraceFieldsFn func(context.Context) map[string]string) {
+	logHandler := newHandler(level)
+	traceHandler := NewTraceHandler(logHandler, getTraceFieldsFn)
+
+	slog.SetDefault(setupSlog(traceHandler, service))
+}
+
 func newHandler(level slog.Leveler) slog.Handler {
 	return slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: level,
@@ -21,23 +38,6 @@ func setupSlog(handler slog.Handler, service string) *slog.Logger {
 	return slog.New(handler).With(
 		slog.String("service", service),
 	)
-}
-
-// New returns a JSON-logging *slog.Logger for service, filtered at level.
-func New(service string, level slog.Leveler) *slog.Logger {
-	logHandler := newHandler(level)
-
-	return setupSlog(logHandler, service)
-}
-
-// NewWithTraces is New with a TraceHandler in front of the JSON handler: on every log record it
-// calls getTraceFieldsFn with the record's context and attaches whatever fields it returns (e.g.
-// trace_id, span_id). Use blincast-go-libs/telemetry's GetTraceFields.
-func NewWithTraces(service string, level slog.Leveler, getTraceFieldsFn func(context.Context) map[string]string) *slog.Logger {
-	logHandler := newHandler(level)
-	traceHandler := NewTraceHandler(logHandler, getTraceFieldsFn)
-
-	return setupSlog(traceHandler, service)
 }
 
 func ParseLevel(value string) (slog.Level, error) {
@@ -97,7 +97,7 @@ func Warn(message string, fields Fields) {
 	Log(context.Background(), slog.LevelWarn, message, fields)
 }
 
-// InfoContext logs at Info level using ctx, so a trace/span active on ctx (see NewWithTraces's
+// InfoContext logs at Info level using ctx, so a trace/span active on ctx (see InitializeWithTraces's
 // getTraceFieldsFn) is attached to the log line. Prefer this over Info wherever a request-scoped
 // ctx is available.
 func InfoContext(ctx context.Context, message string, fields Fields) {

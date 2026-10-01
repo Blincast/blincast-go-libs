@@ -89,8 +89,8 @@ func WrapClient(client *http.Client) *http.Client {
 }
 
 // GetTraceFields returns trace_id and span_id from the active span in ctx, suitable for
-// logger.NewWithTraces's getTraceFieldsFn parameter so log lines carry both. Returns nil when
-// there's no valid span in ctx.
+// logger.InitializeWithTraces's getTraceFieldsFn parameter so log lines carry both. Returns nil
+// when there's no valid span in ctx.
 func GetTraceFields(ctx context.Context) map[string]string {
 	sc := oteltrace.SpanFromContext(ctx).SpanContext()
 	if !sc.IsValid() {
