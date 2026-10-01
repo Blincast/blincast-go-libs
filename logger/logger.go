@@ -11,18 +11,6 @@ import (
 
 type Fields map[string]any
 
-func newHandler(level slog.Leveler) slog.Handler {
-	return slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: level,
-	})
-}
-
-func setupSlog(handler slog.Handler, service string) *slog.Logger {
-	return slog.New(handler).With(
-		slog.String("service", service),
-	)
-}
-
 // Initialize builds a JSON logger for service, filtered at level, and installs it as slog's
 // default via slog.SetDefault.
 func Initialize(service string, level slog.Leveler) {
@@ -38,6 +26,18 @@ func InitializeWithTraces(service string, level slog.Leveler, getTraceFieldsFn f
 	traceHandler := NewTraceHandler(logHandler, getTraceFieldsFn)
 
 	slog.SetDefault(setupSlog(traceHandler, service))
+}
+
+func newHandler(level slog.Leveler) slog.Handler {
+	return slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: level,
+	})
+}
+
+func setupSlog(handler slog.Handler, service string) *slog.Logger {
+	return slog.New(handler).With(
+		slog.String("service", service),
+	)
 }
 
 func ParseLevel(value string) (slog.Level, error) {
