@@ -16,6 +16,8 @@ import (
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
+const tracerName = "github.com/Blincast/blincast-go-libs/telemetry"
+
 type Config struct {
 	ServiceName  string
 	CollectorURL string // URL of the OpenTelemetry collector to send traces to
@@ -100,4 +102,10 @@ func GetTraceFields(ctx context.Context) map[string]string {
 		"trace_id": sc.TraceID().String(),
 		"span_id":  sc.SpanID().String(),
 	}
+}
+
+// StartSpan starts a span named name as a child of the span in ctx, or as a new trace if ctx has
+// none, and returns a ctx carrying it. Use it for work no middleware wraps (e.g. a polling run)
+func StartSpan(ctx context.Context, name string) (context.Context, oteltrace.Span) {
+	return otel.Tracer(tracerName).Start(ctx, name)
 }
