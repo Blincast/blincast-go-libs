@@ -81,6 +81,7 @@ This variant is for services whose router isn't Gin. Don't register both the Gin
 
 - `Config{ServiceName, CollectorURL}` / `InitTelemetry(ctx, cfg) (shutdown func(context.Context) error, err error)` — sets up the `TracerProvider` with an OTLP/gRPC exporter (insecure, always-sample, 5s batch timeout), sets the global propagator (`TraceContext` + `Baggage`). Returns a shutdown func to defer.
 - `GetTraceFields(ctx) map[string]string` — reads `trace_id` and `span_id` off the current span; `nil` if none. Feed this to `logger.NewWithTraces`'s `getTraceFieldsFn` argument (`slog.SetDefault(logger.NewWithTraces(serviceName, level, telemetry.GetTraceFields))`) to correlate logs with traces — see [`logger/README.md`](../logger/README.md)'s "Pairing with telemetry" section. (There's also an unexported `getTraceID` used internally by `MetricsMiddleware`/`GinMetricsMiddleware` to tag Prometheus exemplars with just the trace ID — not part of the public API.)
+- `StartSpan(ctx, name) (context.Context, trace.Span)` — starts a span (child of the one in `ctx`, or a new trace) and returns a `ctx` carrying it. For work no middleware wraps, e.g. a polling run. The caller must `defer span.End()`. Before `InitTelemetry` (or if it failed) it returns a no-op span, never `nil`.
 - `NewClient()` / `WrapClient(client *http.Client) *http.Client` — an `http.Client` (new, or an existing one wrapped) whose `Transport` injects the `traceparent` header on outgoing requests.
 - `NewTelemetryMiddleware(next http.Handler) http.Handler` — plain `net/http` tracing middleware (`otelhttp`), for non-Gin services.
 - `NewMetricServer(port string) *http.Server` — Prometheus `/metrics` endpoint on `:<port>` (Go + process collectors registered by default). `ListenAndServe()` on it blocks like any `http.Server`, so it must be started in its own goroutine (`go telemetry.NewMetricServer(port).ListenAndServe()`) — otherwise it stalls `main()` before the rest of the service ever starts. An empty `port` never stops the app: it logs a `metrics_port_missing` warning via `slog`, and the server ends up on a random port Prometheus can't scrape.
@@ -94,7 +95,16 @@ This variant is for services whose router isn't Gin. Don't register both the Gin
 4. The `slog.SetDefault` from step 2 is also what lets log lines carry the active trace ID and span ID. This alone isn't enough, though — it only takes effect on logs written via `logger.InfoContext`/`WarnContext`/`ErrorContext`/`FatalContext`, so request-scoped logging needs to use those instead of the plain `Info`/`Warn`/`Error`/`Fatal` — see `logger/README.md`'s "Pairing with telemetry" section.
 5. Register the tracing and metrics middlewares on the Gin router: `otelgin.Middleware(serviceName)` and `telemetry.GinMetricsMiddleware()` (for a plain `net/http` router, use `telemetry.NewTelemetryMiddleware` + `telemetry.MetricsMiddleware` instead — see [Usage](#with-plain-nethttp)).
    > `otelgin.Middleware` is imported from `go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin` — a **third-party OpenTelemetry package, not part of `blincast-go-libs`**. The consuming service needs it in its own `go.mod` (`go get go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin`); this repo only provides `telemetry.GinMetricsMiddleware()`.
-6. In every outbound API client (PMS, DASPI, etc.), wrap the `*http.Client` with `telemetry.WrapClient` before using it.
+6. Services without incoming requests (polling workers, cron jobs) have no middleware to start a span, so their logs get no `trace_id` and each outgoing call becomes its own trace. Wrap each unit of work (one span per run, never one for the whole process) instead:
+   ```go
+   func runSync(ctx context.Context) {
+       ctx, span := telemetry.StartSpan(ctx, "sync_rooms")
+       defer span.End()
+
+       doSync(ctx) // outgoing calls and *Context logs in here share the span's trace
+   }
+   ```
+7. In every outbound API client (PMS, DASPI, etc.), wrap the `*http.Client` with `telemetry.WrapClient` before using it.
 
 ## Releasing a new version
 
