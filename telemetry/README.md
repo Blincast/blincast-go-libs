@@ -81,7 +81,7 @@ This variant is for services whose router isn't Gin. Don't register both the Gin
 
 - `Config{ServiceName, CollectorURL}` / `InitTelemetry(ctx, cfg) (shutdown func(context.Context) error, err error)` — sets up the `TracerProvider` with an OTLP/gRPC exporter (insecure, always-sample, 5s batch timeout), sets the global propagator (`TraceContext` + `Baggage`). Returns a shutdown func to defer.
 - `GetTraceFields(ctx) map[string]string` — reads `trace_id` and `span_id` off the current span; `nil` if none. Feed this to `logger.NewWithTraces`'s `getTraceFieldsFn` argument (`slog.SetDefault(logger.NewWithTraces(serviceName, level, telemetry.GetTraceFields))`) to correlate logs with traces — see [`logger/README.md`](../logger/README.md)'s "Pairing with telemetry" section. (There's also an unexported `getTraceID` used internally by `MetricsMiddleware`/`GinMetricsMiddleware` to tag Prometheus exemplars with just the trace ID — not part of the public API.)
-- `StartSpan(ctx, name) (context.Context, trace.Span)` — starts a span (child of the one in `ctx`, or a new trace) and returns a `ctx` carrying it. For work no middleware wraps, e.g. a polling run. The caller must `defer span.End()`. Before `InitTelemetry` (or if it failed) it returns a no-op span, never `nil`.
+- `StartSpan(ctx, name, opts...) (context.Context, trace.Span)` — starts a span (child of the one in `ctx`, or a new trace) and returns a `ctx` carrying it. Optional `trace.SpanStartOption`s are passed to the tracer (e.g. `trace.WithNewRoot()`, `trace.WithLinks(...)`). For work no middleware wraps, e.g. a polling run. The caller must `defer span.End()`. Before `InitTelemetry` (or if it failed) it returns a no-op span, never `nil`.
 - `NewClient()` / `WrapClient(client *http.Client) *http.Client` — an `http.Client` (new, or an existing one wrapped) whose `Transport` injects the `traceparent` header on outgoing requests.
 - `NewTelemetryMiddleware(next http.Handler) http.Handler` — plain `net/http` tracing middleware (`otelhttp`), for non-Gin services.
 - `NewMetricServer(port string) *http.Server` — Prometheus `/metrics` endpoint on `:<port>` (Go + process collectors registered by default). `ListenAndServe()` on it blocks like any `http.Server`, so it must be started in its own goroutine (`go telemetry.NewMetricServer(port).ListenAndServe()`) — otherwise it stalls `main()` before the rest of the service ever starts. An empty `port` never stops the app: it logs a `metrics_port_missing` warning via `slog`, and the server ends up on a random port Prometheus can't scrape.
@@ -103,6 +103,15 @@ This variant is for services whose router isn't Gin. Don't register both the Gin
 
        doSync(ctx) // outgoing calls and *Context logs in here share the span's trace
    }
+   ```
+   If a run handles many independent items (e.g. reservation events), give each item its own trace so searching one `trace_id` doesn't return the whole batch. Start it as a new root linked back to the run's span:
+   ```go
+   itemCtx, span := telemetry.StartSpan(runCtx, "process_reservation",
+       trace.WithNewRoot(),
+       trace.WithLinks(trace.LinkFromContext(runCtx)),
+       trace.WithAttributes(attribute.Int64("event_id", eventID)),
+   )
+   defer span.End()
    ```
 7. In every outbound API client (PMS, DASPI, etc.), wrap the `*http.Client` with `telemetry.WrapClient` before using it.
 
