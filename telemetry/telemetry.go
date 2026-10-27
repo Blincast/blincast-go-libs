@@ -105,7 +105,8 @@ func GetTraceFields(ctx context.Context) map[string]string {
 }
 
 // StartSpan starts a span named name as a child of the span in ctx, or as a new trace if ctx has
-// none, and returns a ctx carrying it. Use it for work no middleware wraps (e.g. a polling run)
-func StartSpan(ctx context.Context, name string) (context.Context, oteltrace.Span) {
-	return otel.Tracer(tracerName).Start(ctx, name)
+// none, and returns a ctx carrying it. Use it for work no middleware wraps (e.g. a polling run).
+// opts are passed to the tracer, e.g. oteltrace.WithNewRoot() or oteltrace.WithLinks(...)
+func StartSpan(ctx context.Context, name string, opts ...oteltrace.SpanStartOption) (context.Context, oteltrace.Span) {
+	return otel.Tracer(tracerName).Start(ctx, name, opts...)
 }
