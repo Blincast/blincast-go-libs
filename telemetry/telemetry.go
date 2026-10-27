@@ -8,6 +8,7 @@ import (
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -105,8 +106,43 @@ func GetTraceFields(ctx context.Context) map[string]string {
 }
 
 // StartSpan starts a span named name as a child of the span in ctx, or as a new trace if ctx has
-// none, and returns a ctx carrying it. Use it for work no middleware wraps (e.g. a polling run).
-// opts are passed to the tracer, e.g. oteltrace.WithNewRoot() or oteltrace.WithLinks(...)
-func StartSpan(ctx context.Context, name string, opts ...oteltrace.SpanStartOption) (context.Context, oteltrace.Span) {
-	return otel.Tracer(tracerName).Start(ctx, name, opts...)
+// none, and returns a ctx carrying it. Use it for work no middleware wraps (e.g. a polling run)
+func StartSpan(ctx context.Context, name string) (context.Context, oteltrace.Span) {
+	return otel.Tracer(tracerName).Start(ctx, name)
+}
+
+// Attrs are span attributes.
+type Attrs map[string]any
+
+// StartLinkedRootSpan starts a span named name in a new trace, linked to the span in ctx, with
+// attrs set on it. Use it for each independent item of a run (e.g. one event of a polling batch),
+// so every item gets its own trace_id. string, int, int64, float64 and bool values keep their
+// type; anything else is stored as fmt.Sprint(value).
+func StartLinkedRootSpan(ctx context.Context, name string, attrs Attrs) (context.Context, oteltrace.Span) {
+	kvs := make([]attribute.KeyValue, 0, len(attrs))
+	for k, v := range attrs {
+		kvs = append(kvs, toAttribute(k, v))
+	}
+	return otel.Tracer(tracerName).Start(ctx, name,
+		oteltrace.WithNewRoot(),
+		oteltrace.WithLinks(oteltrace.LinkFromContext(ctx)),
+		oteltrace.WithAttributes(kvs...),
+	)
+}
+
+func toAttribute(key string, value any) attribute.KeyValue {
+	switch v := value.(type) {
+	case string:
+		return attribute.String(key, v)
+	case int:
+		return attribute.Int(key, v)
+	case int64:
+		return attribute.Int64(key, v)
+	case float64:
+		return attribute.Float64(key, v)
+	case bool:
+		return attribute.Bool(key, v)
+	default:
+		return attribute.String(key, fmt.Sprint(v))
+	}
 }
