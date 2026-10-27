@@ -111,7 +111,7 @@ func StartSpan(ctx context.Context, name string) (context.Context, oteltrace.Spa
 	return otel.Tracer(tracerName).Start(ctx, name)
 }
 
-// Attrs are span attributes, keyed like logger.Fields.
+// Attrs are span attributes.
 type Attrs map[string]any
 
 // StartLinkedRootSpan starts a span named name in a new trace, linked to the span in ctx, with
